@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "db:migrate": "npx prisma db push",
+    "db:migrate": "DATABASE_URL=$DATABASE_URL npx prisma db push",
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start"
