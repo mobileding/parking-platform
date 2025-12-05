@@ -1,0 +1,111 @@
+'use client';
+
+import { useState } from 'react';
+import { SupabaseClient, Session } from '@supabase/supabase-js';
+
+interface CsvUploadFormProps {
+  onUploadComplete: () => void;
+  session: Session;
+  supabase: SupabaseClient;
+}
+
+export default function CsvUploadForm({ onUploadComplete, session, supabase }: CsvUploadFormProps) {
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setMessage('Parsing file...');
+
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setUploading(false);
+        return;
+      }
+
+      // Simple CSV Parser (assumes format: domain,price)
+      // Example:
+      // domain1.com,100
+      // domain2.com,
+      const lines = text.split(/\r\n|\n/);
+      const recordsToInsert = [];
+
+      for (const line of lines) {
+        const [domainRaw, priceRaw] = line.split(',');
+        const domainName = domainRaw?.trim();
+
+        if (domainName && domainName.length > 3) { // Basic validation
+            recordsToInsert.push({
+                owner_id: session.user.id,
+                name: domainName,
+                list_price: priceRaw ? parseFloat(priceRaw.trim()) : null,
+                is_for_sale: true,
+                landing_page_type: 'default_inspiration',
+            });
+        }
+      }
+
+      if (recordsToInsert.length === 0) {
+          setMessage('No valid domains found in file.');
+          setUploading(false);
+          return;
+      }
+
+      setMessage(`Uploading ${recordsToInsert.length} domains...`);
+
+      // Bulk Insert into Supabase
+      const { error } = await supabase
+        .from('domains')
+        .insert(recordsToInsert);
+
+      if (error) {
+        console.error('Bulk upload error:', error);
+        setMessage(`Upload failed: ${error.message}`);
+      } else {
+        setMessage(`Successfully imported ${recordsToInsert.length} domains!`);
+        onUploadComplete(); // Refresh the list
+        // Reset file input
+        e.target.value = ''; 
+      }
+      
+      setUploading(false);
+    };
+
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        Mass Upload (CSV)
+      </h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Upload a CSV file with format: <code>domain.com, 5000</code> (price is optional).
+      </p>
+      
+      <div className="flex items-center gap-4">
+        <label className="cursor-pointer bg-indigo-50 text-indigo-700 px-4 py-2 rounded-md font-medium hover:bg-indigo-100 transition">
+            <span>{uploading ? 'Processing...' : 'Select CSV File'}</span>
+            <input 
+                type="file" 
+                accept=".csv" 
+                className="hidden" 
+                onChange={handleFileUpload}
+                disabled={uploading}
+            />
+        </label>
+        {message && (
+            <span className={`text-sm ${message.includes('Success') ? 'text-green-600' : 'text-gray-600'}`}>
+                {message}
+            </span>
+        )}
+      </div>
+    </div>
+  );
+}

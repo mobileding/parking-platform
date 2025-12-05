@@ -40,7 +40,7 @@ export default function NotFound() {
           )}
         </h1>
         <p className="mt-3 text-lg text-gray-600">
-          This subdomain hasn't been created yet.
+          no such domain.
         </p>
         <div className="mt-6">
           <Link

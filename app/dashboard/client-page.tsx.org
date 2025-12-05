@@ -1,0 +1,76 @@
+// app/dashboard/client-page.tsx (FINAL STABILIZED VERSION)
+'use client';
+
+import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, useMemo } from 'react'; // <-- ADD useMemo
+import DashboardContent from './DashboardContent';
+
+// Initialize the core Supabase client ONCE using useMemo for stability
+export default function DashboardPageClient() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  // Use useMemo to guarantee the Supabase client object is stable 
+  // and only created on the first render, preventing dependency loops.
+  const supabase = useMemo(() => {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }, []); // Empty dependency array ensures it runs once
+
+  useEffect(() => {
+    async function checkSession() {
+      // 1. Check session
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // 2. Update state or redirect
+      if (session) {
+        setSession(session);
+        setLoading(false); // Only set loading to false here if session is found
+      } else {
+        // Redirect if no session is found
+        router.push('/login');
+        // Do NOT set loading to false here, let the router handle the exit
+      }
+    }
+
+    // 3. Listen for auth changes (Crucial for handling session expiration/logout)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session) {
+          router.push('/login');
+        } else {
+          setSession(session);
+          setLoading(false);
+        }
+      }
+    );
+
+    // Initial check
+    checkSession();
+
+    // Clean up the listener when the component is destroyed
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+    
+    // Dependencies: router and supabase (guaranteed stable by useMemo)
+  }, [router, supabase]); 
+
+  // --- Rendering Logic ---
+
+  if (loading) {
+    return <div className="text-center p-20">Loading Dashboard...</div>;
+  }
+
+  // If session is valid, render the main content component
+  if (session) {
+    return <DashboardContent session={session} />;
+  }
+  
+  // This line handles the split-second gap before the router redirect fires
+  return <div className="text-center p-20">Redirecting...</div>;
+}
