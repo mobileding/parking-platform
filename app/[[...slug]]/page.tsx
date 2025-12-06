@@ -1,14 +1,17 @@
+// app/[[...slug]]/page.tsx
+
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import DomainLandingPage from '@/components/DomainLandingPage'; 
 import PlatformHomePage from '@/components/PlatformHomePage'; 
-import { Domain } from '@/types/Domain'; 
-import { publicSupabase } from '@/utils/supabase/publicClient'; // 💡 Using the new public client
+// 💡 FIX: Changed import to lowercase 'domain' to match file casing and resolve build error
+import { Domain } from '@/types/domain'; 
+import { publicSupabase } from '@/utils/supabase/publicClient';
+import { Metadata } from 'next';
 
-// Ensures the page is rendered dynamically on the server for every request.
 export const dynamic = 'force-dynamic'; 
 
-export interface DailyContent {
+interface DailyContent {
   id: number;
   content_type: string;
   body: string;
@@ -16,10 +19,11 @@ export interface DailyContent {
   target_url: string | null;
 }
 
+// 💡 FIX: 'params' must be a Promise in Next.js 15
 interface DomainPageProps {
-  params: {
+  params: Promise<{
     slug: string[] | undefined; 
-  };
+  }>;
 }
 
 async function getHostHeader() {
@@ -27,8 +31,24 @@ async function getHostHeader() {
   return requestHeaders.get('host');
 }
 
-export default async function DomainPage({ params }: DomainPageProps) {
+// 💡 NEW: Generate Metadata (fixes types for build)
+export async function generateMetadata({ params }: DomainPageProps): Promise<Metadata> {
+  const resolvedParams = await params; // Await params to satisfy Next.js
+  const hostWithPort = await getHostHeader();
+  if (!hostWithPort) return {};
   
+  const host = hostWithPort.split(':')[0].trim();
+  
+  if (host === 'localhost' || host === 'iolab.com') {
+      return { title: "iolab.com - Domain Parking" };
+  }
+  return { title: `${host} - Parked` };
+}
+
+export default async function DomainPage({ params }: DomainPageProps) {
+  // 💡 FIX: Await params before using (even if we rely on headers)
+  const resolvedParams = await params;
+
   const hostWithPort = await getHostHeader();
   
   if (!hostWithPort) {
@@ -43,9 +63,7 @@ export default async function DomainPage({ params }: DomainPageProps) {
   }
 
   // --- Parallel Data Fetching ---
-  // 💡 FIX: Query using the stable public client instance (publicSupabase)
   const [domainResult, contentResult] = await Promise.all([
-    // Query 1: Fetch Domain Data (Public Read)
     publicSupabase
       .from('domains')
       .select(`
@@ -55,45 +73,33 @@ export default async function DomainPage({ params }: DomainPageProps) {
       .eq('name', host) 
       .single(),
     
-    // Query 2: Fetch All Active Daily Content (Public Read)
     publicSupabase
       .from('daily_content')
       .select('*')
       .eq('is_active', true)
   ]);
 
-  // --- Error Handling and Data Extraction ---
-  
-  // 1. Check if Domain Record was found
+  // Error Handling
   if (domainResult.error || !domainResult.data) {
     console.error(`Domain lookup failed for host ${host}:`, domainResult.error);
-    
-    // TEMPORARY DIAGNOSTIC: Display the name it failed on instead of 404
-    return (
-        <div className="text-center p-20">
-            <h1>DOMAIN NOT FOUND</h1>
-            <p>The application failed to find a record named: <strong>{host}</strong> in the database.</p>
-            <p className="mt-4">Please verify the name in the Supabase Table Editor matches this exactly.</p>
-        </div>
-    );
+    return notFound();
   }
 
   const domain = domainResult.data as any; 
   const allContent = contentResult.data as DailyContent[];
 
-  // 2. SAFETY CHECK: If owner is disabled, hide the domain
+  // Safety Check
   if (domain.profiles?.status && domain.profiles.status !== 'active') {
      return notFound(); 
   }
 
-  // 3. Select Random Content
+  // Select Random Content
   let randomContent: DailyContent | null = null;
   if (allContent && allContent.length > 0) {
     const randomIndex = Math.floor(Math.random() * allContent.length);
     randomContent = allContent[randomIndex];
   }
 
-  // 4. Render the Landing Page
   return (
     <DomainLandingPage 
       domain={domain} 

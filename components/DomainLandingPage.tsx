@@ -2,7 +2,7 @@
 
 'use client'; 
 
-import { Domain } from '@/types/Domain'; 
+import { Domain } from '@/types/domain'; 
 import { useState, useEffect } from 'react';
 import OfferModal from '@/components/OfferModal'; // 💡 Import the modal
 

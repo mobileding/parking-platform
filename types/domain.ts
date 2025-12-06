@@ -1,4 +1,4 @@
-// types/Domain.ts (New file)
+// types/domain.ts (New file)
 
 export interface Domain {
     id: number;

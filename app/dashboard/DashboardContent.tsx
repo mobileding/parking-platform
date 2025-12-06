@@ -18,6 +18,8 @@ interface Domain {
     list_price: number | null;
     is_for_sale: boolean;
     landing_page_type: string;
+    // 💡 NEW: Add the offers relation structure
+    offers?: { count: number }[]; 
 }
 
 export default function DashboardContent() {
@@ -54,7 +56,7 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
     }, []); 
 
     // 2. CRITICAL: INITIAL AUTH CHECK AND LISTENER
-    useEffect(() => {
+   useEffect(() => {
         let authListener: { subscription: { unsubscribe: () => void } } | undefined;
 
         async function initializeSession() {
@@ -62,13 +64,19 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
             
             if (session) {
                 setCurrentSession(session);
-                authListener = supabase.auth.onAuthStateChange((_event, newSession) => {
+                
+                // 💡 FIX: Destructure 'data' from the response
+                const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
                     if (!newSession) {
                         router.push('/login');
                     } else {
                         setCurrentSession(newSession);
                     }
                 });
+                
+                // 💡 FIX: Assign the data object (which contains the subscription) to your variable
+                authListener = data;
+                
                 setLoadingAuth(false);
             } else {
                 router.push('/login');
@@ -83,8 +91,7 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
             }
         };
         
-    }, [router, supabase]); 
-
+    }, [router, supabase]);
 
     // 3. fetchDomains useCallback
     const fetchDomains = useCallback(async () => {
@@ -101,7 +108,7 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
                 .from('domains')
                 .select(`
                 *,
-                offers(count) // 💡 FIX: Use the plural table name for the count relation
+                offers(count) 
             `)
 		.eq('owner_id', currentSession.user.id)
                 .order('name', { ascending: true });

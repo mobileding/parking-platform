@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Domain } from '@/types/Domain';
+import { Domain } from '@/types/domain';
 
 interface OfferModalProps {
   domain: Domain;
