@@ -56,21 +56,39 @@ const handleSubmit = async (e: React.FormEvent) => {
         const { error } = await supabase
             .from('domains')
             .insert(domainData); 
+if (error) {
+    // ... error handling ...
+} else {
+    // --- 1. SUPABASE SUCCESS ---
+    setMessage(`Database saved. Configuring Vercel routing for "${name}"...`);
 
-        if (error) {
-            console.error('Domain Insertion Error:', error);
-            setMessage(`Error adding domain: ${error.message}.`);
-        } else {
-            setMessage(`Success! Domain "${name}" added.`);
-            
-            if (onDomainAdded) {
-                onDomainAdded(); 
-            }
-            // Clear form fields on successful submission
-            setName('');
-            setListPrice('');
-            setIsForSale(true);
-        }
+    // --- 2. CALL VERCEL API (New Code) ---
+    try {
+        const vercelRes = await fetch('/api/add-domain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain: name }),
+        });
+        
+        if (!vercelRes.ok) {
+            // Even if Vercel fails, the DB saved, so we warn the user
+            console.error('Vercel configuration failed');
+            setMessage('Saved to DB, but Vercel config failed. Contact support.');
+        } else {
+             setMessage(`Success! "${name}" is now live.`);
+        }
+    } catch (vErr) {
+        console.error('Vercel API Network Error', vErr);
+    }
+
+    // --- 3. UI Cleanup (Existing Code) ---
+    if (onDomainAdded) {
+        onDomainAdded();
+    }
+    setName('');
+    setListPrice('');
+    setIsForSale(true);
+}
 
     } catch (e) {
         console.error('An unexpected error occurred:', e);
