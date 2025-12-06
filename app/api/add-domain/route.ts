@@ -4,13 +4,19 @@ export async function POST(request: Request) {
   try {
     const { domain } = await request.json();
 
+    console.log(`[API] Received request to add domain: ${domain}`);
+
     if (!domain) {
       return NextResponse.json({ error: 'Domain is required' }, { status: 400 });
     }
 
-    // 1. Call Vercel API to add the domain to the project
+    // Construct URL carefully
+    const apiUrl = `https://api.vercel.com/v10/projects/${process.env.PROJECT_ID_VERCEL}/domains?teamId=${process.env.TEAM_ID_VERCEL}`;
+    
+    console.log(`[API] Sending request to Vercel...`);
+
     const response = await fetch(
-      `https://api.vercel.com/v10/projects/${process.env.PROJECT_ID_VERCEL}/domains?teamId=${process.env.TEAM_ID_VERCEL}`,
+      apiUrl,
       {
         method: 'POST',
         headers: {
@@ -23,9 +29,12 @@ export async function POST(request: Request) {
 
     const data = await response.json();
 
-    if (response.error) {
+    // 💡 FIX: Check !response.ok instead of response.error
+    if (!response.ok) {
       console.error('Vercel API Error:', data);
-      return NextResponse.json({ error: data.error.message }, { status: 400 });
+      // Safe access to error message
+      const errorMessage = data.error?.message || 'Unknown Vercel API error';
+      return NextResponse.json({ error: errorMessage }, { status: response.status });
     }
 
     // 2. Return Success
