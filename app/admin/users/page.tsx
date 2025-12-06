@@ -1,5 +1,7 @@
 import AdminUserList from '@/components/AdminUserList';
 
+
+export const dynamic = 'force-dynamic';
 export default function AdminUsersPage() {
   return (
     <div className="container mx-auto p-8">

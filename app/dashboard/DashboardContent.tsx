@@ -7,10 +7,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, useMemo } from 'react'; 
 import LogoutButton from '@/components/LogoutButton'; 
 import AddDomainForm from '@/components/AddDomainForm'; 
-import CsvUploadForm from '@/components/CsvUploadForm'; // 💡 NEW IMPORT
-import EditDomainDialog from '@/components/EditDomainDialog'; // edit domain dialog
-import OffersListModal from '@/components/OffersListModal'; // Add this import
-import ConfirmDeleteModal from '@/components/ConfirmDeleteModal'; // NEW IMPORT
+import CsvUploadForm from '@/components/CsvUploadForm'; 
+import EditDomainDialog from '@/components/EditDomainDialog'; 
+import OffersListModal from '@/components/OffersListModal'; 
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal'; 
 
 interface Domain {
     id: number;
@@ -18,36 +18,25 @@ interface Domain {
     list_price: number | null;
     is_for_sale: boolean;
     landing_page_type: string;
-    // 💡 NEW: Add the offers relation structure
     offers?: { count: number }[]; 
 }
 
 export default function DashboardContent() {
     
+    // --- STATE DEFINITIONS ---
     const [currentSession, setCurrentSession] = useState<Session | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-// Inside DashboardContent function, with other state:
-    const [viewingOffersDomain, setViewingOffersDomain] = useState<Domain | null>(null);
-// Inside DashboardContent function, with other handlers:
-    const handleViewOffers = (domain: Domain) => {
-    setViewingOffersDomain(domain); // This opens the modal
-};
-// 2. Add State for the Editing Domain:**
-    const [editingDomain, setEditingDomain] = useState<Domain | null>(null);
-// 3. Update the `handleEdit` function:**
-const handleEdit = (domain: Domain) => {
-    setEditingDomain(domain); // This opens the modal
-};
-const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NEW STATE
-
+    const [hasFetchedDomains, setHasFetchedDomains] = useState(false);
     const [domains, setDomains] = useState<Domain[]>([]);
     const [loadingDomains, setLoadingDomains] = useState(true);
     const [formKey, setFormKey] = useState(0); 
+
+    const [editingDomain, setEditingDomain] = useState<Domain | null>(null);
+    const [viewingOffersDomain, setViewingOffersDomain] = useState<Domain | null>(null);
+    const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); 
+
     const router = useRouter(); 
 
-
-
-    // 1. Supabase client remains stable
     const supabase = useMemo(() => {
         return createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,8 +44,8 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
         );
     }, []); 
 
-    // 2. CRITICAL: INITIAL AUTH CHECK AND LISTENER
-   useEffect(() => {
+    // --- AUTHENTICATION & SESSION LOGIC ---
+    useEffect(() => {
         let authListener: { subscription: { unsubscribe: () => void } } | undefined;
 
         async function initializeSession() {
@@ -65,7 +54,6 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
             if (session) {
                 setCurrentSession(session);
                 
-                // 💡 FIX: Destructure 'data' from the response
                 const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
                     if (!newSession) {
                         router.push('/login');
@@ -73,13 +61,11 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
                         setCurrentSession(newSession);
                     }
                 });
-                
-                // 💡 FIX: Assign the data object (which contains the subscription) to your variable
                 authListener = data;
-                
                 setLoadingAuth(false);
             } else {
                 router.push('/login');
+                setLoadingAuth(false);
             }
         }
         
@@ -93,7 +79,7 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
         
     }, [router, supabase]);
 
-    // 3. fetchDomains useCallback
+    // --- DATA FETCHING LOGIC ---
     const fetchDomains = useCallback(async () => {
         if (!currentSession || !currentSession.user?.id) {
             setDomains([]);
@@ -107,10 +93,10 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
             const { data, error } = await supabase
                 .from('domains')
                 .select(`
-                *,
-                offers(count) 
-            `)
-		.eq('owner_id', currentSession.user.id)
+                    *,
+                    offers(count)
+                `)
+                .eq('owner_id', currentSession.user.id) 
                 .order('name', { ascending: true });
 
             if (error) {
@@ -127,15 +113,16 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
     }, [supabase, currentSession]); 
 
 
-    // 4. Initial Domain Data Fetch
+    // 4. Initial Domain Data Fetch (Synchronized on Auth Load)
     useEffect(() => {
-        if (!loadingAuth && currentSession) { 
+        if (!loadingAuth && currentSession && !hasFetchedDomains) { 
             fetchDomains(); 
+            setHasFetchedDomains(true);
         }
-    }, [fetchDomains, currentSession, loadingAuth]); 
+    }, [fetchDomains, currentSession, loadingAuth, hasFetchedDomains]); 
 
 
-    // 5. Form Key Reset
+    // 5. Form Key Reset (Forces Add Domain Form Remount)
     useEffect(() => {
         if (loadingDomains === false) {
             setFormKey(prevKey => prevKey + 1);
@@ -143,44 +130,51 @@ const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null); // NE
     }, [loadingDomains]);
 
     
-    // 💡 NEW: Modal Handle Delete Logic
-  const handleDelete = async (domainId: number, domainName: string) => {
-    // Find the full domain object from the list to pass to the modal
-    const domain = domains.find(d => d.id === domainId);
-    if (domain) {
-        setDomainToDelete(domain);
-    }
-};
+    // --- HANDLERS (EDIT/DELETE/VIEW) ---
 
-const confirmDeletion = async () => {
-    if (!domainToDelete) return; // Should not happen
+    const handleEdit = (domain: Domain) => {
+        setEditingDomain(domain); // Opens Edit Modal
+    };
 
-    const domainId = domainToDelete.id;
-    const domainName = domainToDelete.name;
+    const handleViewOffers = (domain: Domain) => {
+        setViewingOffersDomain(domain); // Opens Offers Modal
+    };
 
-    // Close the modal immediately for better UX
-    setDomainToDelete(null); 
-    
-    // Optimistic update: Remove from UI immediately
-    setDomains(prev => prev.filter(d => d.id !== domainId));
+    const confirmDeletion = async () => {
+        if (!domainToDelete) return; 
 
-    try {
-        // Database Delete 
-        const { error } = await supabase
-            .from('domains')
-            .delete()
-            .eq('id', domainId);
+        const domainId = domainToDelete.id;
+        // Close the modal immediately for better UX
+        setDomainToDelete(null); 
+        
+        // Optimistic update
+        setDomains(prev => prev.filter(d => d.id !== domainId));
 
-        if (error) {
-            alert(`Error deleting: ${error.message}`);
-            fetchDomains(); // Revert UI on error
+        try {
+            const { error } = await supabase
+                .from('domains')
+                .delete()
+                .eq('id', domainId);
+
+            if (error) {
+                alert(`Error deleting: ${error.message}`);
+                fetchDomains(); // Revert UI on error
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            fetchDomains(); 
         }
-    } catch (err) {
-        console.error('Delete error:', err);
-        fetchDomains(); 
-    }
-};
-    // --- Rendering Logic ---
+    };
+
+    const handleDelete = (domainId: number, domainName: string) => {
+        const domain = domains.find(d => d.id === domainId);
+        if (domain) {
+            setDomainToDelete(domain); // Opens Confirmation Modal
+        }
+    };
+
+
+    // --- RENDERING LOGIC ---
 
     if (loadingAuth || !currentSession) {
         return <div className="text-center p-20">Loading Authentication...</div>;
@@ -215,65 +209,60 @@ const confirmDeletion = async () => {
                         You currently have no domains listed. Add one below!
                     </div>
                 ) : (
-                    <div className="overflow-x-auto"> 
+                    // CORRECTED JSX STRUCTURE
+                    <div className="overflow-x-auto"> 
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Domain</th>
-    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
-    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-    {/* 💡 NEW: Offers Column Header */}
-    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Offers</th>
-    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-</tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Domain</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Offers</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-    {domains.map((domain) => (
-        <tr key={domain.id} className="hover:bg-gray-50 transition-colors">
-            
-            {/* Cell 1: Domain Name */}
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                {domain.name}
-            </td>
-            
-            {/* Cell 2: Price */}
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                {typeof domain.list_price === 'number' ? `$${domain.list_price.toFixed(2)}` : '-'}
-            </td>
-            
-            {/* Cell 3: Status */}
-            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${domain.is_for_sale ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                    {domain.is_for_sale ? 'For Sale' : 'Parked'}
-                </span>
-            </td>
-            
-            {/* 💡 Cell 4: Offers (The Fix) */}
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold cursor-pointer hover:text-indigo-700" 
-    onClick={() => handleViewOffers(domain)} // 💡 NEW: Attach the click handler here
->
-    {domain.offers?.[0]?.count || 0} Offers
-            </td>
+                                {domains.map((domain) => (
+                                    <tr key={domain.id} className="hover:bg-gray-50 transition-colors">
+                                        
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{domain.name}</td>
+                                        
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                            {typeof domain.list_price === 'number' ? `$${domain.list_price.toFixed(2)}` : '-'}
+                                        </td>
+                                        
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${domain.is_for_sale ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                {domain.is_for_sale ? 'For Sale' : 'Parked'}
+                                            </span>
+                                        </td>
+                                        
+                                        {/* Cell 4: Offers (Actionable Link) */}
+                                        <td 
+                                            className="px-6 py-4 whitespace-nowrap text-left text-sm font-bold cursor-pointer text-indigo-600 hover:text-indigo-800" 
+                                            onClick={() => handleViewOffers(domain)}
+                                        >
+                                            {domain.offers?.[0]?.count || 0} Offers
+                                        </td>
 
-            {/* Cell 5: Actions (Edit & Delete) */}
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                <button
-                    onClick={() => handleEdit(domain)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-4 font-bold transition-colors"
-                >
-                    Edit
-                </button>
-                <button 
-                    onClick={() => handleDelete(domain.id, domain.name)}
-                    className="text-red-600 hover:text-red-900 transition-colors"
-                >
-                    Delete
-                </button>
-            </td>
-
-        </tr>
-    ))}
-</tbody>
+                                        {/* Cell 5: Actions (Edit & Delete) */}
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                            <button
+                                                onClick={() => handleEdit(domain)}
+                                                className="text-indigo-600 hover:text-indigo-900 mr-4 font-bold transition-colors"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(domain.id, domain.name)}
+                                                className="text-red-600 hover:text-red-900 transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
                         </table>
                     </div>
                 )}
@@ -290,7 +279,7 @@ const confirmDeletion = async () => {
                     />
                 </section>
 
-                {/* --- 💡 CSV Bulk Upload Form --- */}
+                {/* --- CSV Bulk Upload Form --- */}
                 <section>
                     <CsvUploadForm 
                         session={currentSession}
@@ -313,31 +302,33 @@ const confirmDeletion = async () => {
             <div className="mt-16 pt-8 border-t text-center">
                  <LogoutButton supabase={supabase as SupabaseClient} />
             </div>
-{/* 💡 INSERT THE MODAL HERE (At the very bottom) */}
+            
+            {/* MODALS RENDERED HERE: (They will overlay the entire screen) */}
+            
             {editingDomain && (
                 <EditDomainDialog
                     domain={editingDomain}
                     supabase={supabase as SupabaseClient}
-                    onClose={() => setEditingDomain(null)} // Close the modal
-                    onSuccess={fetchDomains}               // Refresh list after save
+                    onClose={() => setEditingDomain(null)} 
+                    onSuccess={fetchDomains}               
                 />
             )}
-        {/* 💡 NEW: Offers List Modal */}
-{viewingOffersDomain && (
-    <OffersListModal
-        domain={viewingOffersDomain}
-        supabase={supabase as SupabaseClient}
-        onClose={() => setViewingOffersDomain(null)}
-    />
-)}
-{domainToDelete && (
-        <ConfirmDeleteModal
-            domainName={domainToDelete.name}
-            onClose={() => setDomainToDelete(null)}
-            onConfirm={confirmDeletion}
-        />
-    )}
-
-</div>
+            
+            {viewingOffersDomain && (
+                <OffersListModal
+                    domain={viewingOffersDomain}
+                    supabase={supabase as SupabaseClient}
+                    onClose={() => setViewingOffersDomain(null)}
+                />
+            )}
+            
+            {domainToDelete && (
+                <ConfirmDeleteModal
+                    domainName={domainToDelete.name}
+                    onClose={() => setDomainToDelete(null)}
+                    onConfirm={confirmDeletion}
+                />
+            )}
+        </div>
     );
 }

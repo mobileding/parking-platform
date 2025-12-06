@@ -1,6 +1,7 @@
 // app/login/page.tsx
 
 import SignInForm from './SignInForm';
+export const dynamic = 'force-dynamic'; // 💡 ADD THIS LINE
 
 export default function LoginPage() {
   return (

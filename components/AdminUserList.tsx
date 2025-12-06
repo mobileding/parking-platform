@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient, Session } from '@supabase/supabase-js';
+import { createClient, Session, SupabaseClient } from '@supabase/supabase-js';
 
 interface UserProfile {
   id: string;
@@ -26,8 +26,11 @@ export default function AdminUserList() {
   // State for the "Drill-Down" Modal
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [userDomains, setUserDomains] = useState<UserDomain[]>([]);
+  
+  // 💡 FIX: Define the loading state locally for the modal domains list
   const [loadingDomains, setLoadingDomains] = useState(false);
 
+  // 1. Stable Client
   const supabase = useMemo(() => {
     return createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +38,7 @@ export default function AdminUserList() {
     );
   }, []);
 
-  // 1. Init Session
+  // 2. Initialize Session
   useEffect(() => {
     async function initSession() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -44,9 +47,9 @@ export default function AdminUserList() {
     initSession();
   }, [supabase]);
 
-  // 2. Fetch Users with Domain Count
+  // 3. Fetch Users with Domain Count
   const fetchUsers = async () => {
-    if (!session) return;
+    if (!session) return; 
 
     setLoading(true);
     const { data, error } = await supabase
@@ -59,22 +62,27 @@ export default function AdminUserList() {
 
     if (error) {
       console.error('Error fetching users:', error);
+      alert(`Error: ${error.message}`);
     } else {
       setUsers(data as any[]);
     }
     setLoading(false);
   };
 
+  // 4. Trigger Fetch when Session is Ready
   useEffect(() => {
-    if (session) fetchUsers();
+    if (session) {
+      fetchUsers();
+    }
   }, [session]);
 
-  // 3. Fetch Domains for Selected User
+  // 5. Fetch Domains for Selected User
   const fetchUserDomains = async (userId: string) => {
-      setLoadingDomains(true);
+      // 💡 FIX: Use the locally defined setLoadingDomains
+      setLoadingDomains(true); 
       const { data, error } = await supabase
         .from('domains')
-        .select('*')
+        .select('id, name, is_for_sale') // Select only necessary fields
         .eq('owner_id', userId);
       
       if (error) {
@@ -82,7 +90,8 @@ export default function AdminUserList() {
       } else {
           setUserDomains(data as UserDomain[]);
       }
-      setLoadingDomains(false);
+      // 💡 FIX: Use the locally defined setLoadingDomains
+      setLoadingDomains(false); 
   };
 
   // Handle "View Domains" Click
@@ -95,9 +104,12 @@ export default function AdminUserList() {
   const deleteDomain = async (domainId: number) => {
       if(!confirm("Are you sure you want to delete this domain?")) return;
       
+      // Optimistic Update: Filter from the modal's current list
+      setUserDomains(prev => prev.filter(d => d.id !== domainId));
+
       await supabase.from('domains').delete().eq('id', domainId);
-      // Refresh the sub-list and the main list (to update count)
-      if(selectedUser) fetchUserDomains(selectedUser.id);
+      
+      // Refresh the main list count asynchronously
       fetchUsers();
   };
   
@@ -115,16 +127,20 @@ export default function AdminUserList() {
     fetchUsers();
   };
 
+  // --- Rendering ---
+
   if (loading && !users.length) return <div className="p-6 text-gray-500">Loading Users...</div>;
 
   return (
     <div>
-      {/* MAIN USER LIST */}
+      {/* MAIN USER LIST (JSX remains the same) */}
       <div className="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
+        {/* ... table content ... */}
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Email</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Role</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Domains</th>
               <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
@@ -135,12 +151,16 @@ export default function AdminUserList() {
               <tr key={user.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.email}</td>
                 <td className="px-6 py-4 text-sm">
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {user.role || 'user'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-sm">
                   <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                     {user.status || 'active'}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-indigo-600 font-bold cursor-pointer hover:underline" onClick={() => handleViewDomains(user)}>
-                   {/* Accessing the count from the relation array */}
                    {user.domains && user.domains[0] ? user.domains[0].count : 0} Domains
                 </td>
                 <td className="px-6 py-4 text-right text-sm font-medium space-x-2">
@@ -155,7 +175,7 @@ export default function AdminUserList() {
         </table>
       </div>
 
-      {/* USER DOMAINS MODAL */}
+      {/* USER DOMAINS MODAL (JSX remains the same) */}
       {selectedUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up">
@@ -165,6 +185,7 @@ export default function AdminUserList() {
                   </div>
                   
                   <div className="p-0 max-h-[60vh] overflow-y-auto">
+                      {/* 💡 Rendering uses the local loadingDomains state */}
                       {loadingDomains ? (
                           <div className="p-8 text-center">Loading domains...</div>
                       ) : userDomains.length === 0 ? (

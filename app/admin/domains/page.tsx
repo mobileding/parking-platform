@@ -1,4 +1,5 @@
 import AdminDomainList from '@/components/AdminDomainList';
+export const dynamic = 'force-dynamic'; // 💡 ADD THIS LINE
 
 export default function AdminDomainsPage() {
   return (

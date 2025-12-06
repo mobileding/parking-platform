@@ -1,5 +1,5 @@
 import Link from 'next/link';
-
+export const dynamic = 'force-dynamic'; // 💡 ADD THIS LINE
 export default function AdminDashboardPage() {
   return (
     <div className="container mx-auto p-8">

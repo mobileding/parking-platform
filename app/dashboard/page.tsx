@@ -4,6 +4,8 @@
 
 import DashboardContent from './DashboardContent';
 
+export const dynamic = 'force-dynamic'; // 💡 ADD THIS LINE
+
 export default function DashboardPage() {
     return <DashboardContent />;
 }

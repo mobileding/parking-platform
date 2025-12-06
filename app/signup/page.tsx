@@ -1,6 +1,7 @@
 // app/signup/page.tsx
 
 import SignUpForm from './SignUpForm';
+export const dynamic = 'force-dynamic'; // 💡 ADD THIS LINE
 
 export default function SignUpPage() {
   return (
